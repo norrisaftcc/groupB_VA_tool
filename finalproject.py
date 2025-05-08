@@ -158,11 +158,19 @@ if uploaded_file is not None:
         Find combinations of Certificate/Diploma programs (excluding students with Associate degrees)
         """
         try:
+            if df.empty:
+                st.warning("Empty dataframe provided to cert_dip_combos")
+                return pd.DataFrame(columns=['Program_Combo', 'ID', 'Count'])
+                
             # Identify IDs of students who have any Associate's program
             associate_ids = df[df['PROGRAMS'].fillna('').str.startswith('A')]['ID'].unique()
 
             # Remove all records for those IDs
             filtered_df = df[~df['ID'].isin(associate_ids)]
+            
+            if filtered_df.empty:
+                st.warning("No Certificate/Diploma programs found after filtering out Associate degrees")
+                return pd.DataFrame(columns=['Program_Combo', 'ID', 'Count'])
 
             # Create full program descriptions
             filtered_df['Program_Desc'] = filtered_df['PROGRAMS'] + ' - ' + filtered_df['Actual Title']
@@ -176,13 +184,21 @@ if uploaded_file is not None:
 
             # Define who qualifies: must have at least two non-Associate programs
             def qualifies(programs):
-                return len(programs) >= 2 and all(p.startswith(('C', 'D')) for p in programs)
+                try:
+                    return len(programs) >= 2 and all(str(p).startswith(('C', 'D')) for p in programs)
+                except Exception:
+                    # If there's any error in the program codes, be safe and exclude
+                    return False
 
             # Filter to only qualifying students
             qualifying_students = student_programs[student_programs['Program_Codes'].apply(qualifies)]
+            
+            if qualifying_students.empty:
+                st.warning("No qualifying Certificate/Diploma combinations found")
+                return pd.DataFrame(columns=['Program_Combo', 'ID', 'Count'])
 
             # Create sorted combo string
-            qualifying_students.loc[:, 'Program_Combo'] = qualifying_students['Program_Desc'].apply(
+            qualifying_students['Program_Combo'] = qualifying_students['Program_Desc'].apply(
                 lambda programs: ', '.join(sorted(programs))
             )
 
@@ -204,6 +220,10 @@ if uploaded_file is not None:
         Find all combinations of programs (Associates, Certificates, Diplomas)
         """
         try:
+            if df.empty:
+                st.warning("Empty dataframe provided to all_combos")
+                return pd.DataFrame(columns=['Program_Combo', 'ID', 'Count'])
+                
             # Create full program descriptions
             df['Program_Desc'] = df['PROGRAMS'] + ' - ' + df['Actual Title']
 
@@ -216,10 +236,18 @@ if uploaded_file is not None:
 
             # Define who qualifies: must have at least two programs from A/C/D
             def qualifies(programs):
-                return len(programs) >= 2 and all(p.startswith(('A', 'C', 'D')) for p in programs)
+                try:
+                    return len(programs) >= 2 and all(str(p).startswith(('A', 'C', 'D')) for p in programs)
+                except Exception:
+                    # If there's any error in the program codes, be safe and exclude
+                    return False
 
             # Filter to only qualifying students
             qualifying_students = student_programs[student_programs['Program_Codes'].apply(qualifies)]
+            
+            if qualifying_students.empty:
+                st.warning("No qualifying program combinations found")
+                return pd.DataFrame(columns=['Program_Combo', 'ID', 'Count'])
 
             # Create sorted combo string
             qualifying_students['Program_Combo'] = qualifying_students['Program_Desc'].apply(
@@ -260,33 +288,50 @@ if uploaded_file is not None:
     # Create tabs for different analyses
     tab1, tab2, tab3 = st.tabs(["Associate + Certificate/Diploma", "Certificate/Diploma", "Both"])
 
-    # Load data
-    with st.spinner("Analyzing Associate + Certificate/Diploma combinations..."):
-        associates_df = associate_combos(df)
+    # Load data safely
+    try:
+        with st.spinner("Analyzing Associate + Certificate/Diploma combinations..."):
+            associates_df = associate_combos(df)
 
-    with st.spinner("Analyzing Certificate/Diploma combinations..."):
-        cert_dip_df = cert_dip_combos(df)
+        with st.spinner("Analyzing Certificate/Diploma combinations..."):
+            cert_dip_df = cert_dip_combos(df)
 
-    with st.spinner("Analyzing All Valid Combinations..."):
-        all_df = all_combos(df)
+        with st.spinner("Analyzing All Valid Combinations..."):
+            all_df = all_combos(df)
+    except Exception as e:
+        st.error(f"Error during data analysis: {e}")
+        associates_df = pd.DataFrame(columns=['Program_Combo', 'ID', 'Count'])
+        cert_dip_df = pd.DataFrame(columns=['Program_Combo', 'ID', 'Count'])
+        all_df = pd.DataFrame(columns=['Program_Combo', 'ID', 'Count'])
 
     # Tab 1: Associate + Certificate/Diploma
     with tab1:
         st.subheader("Associate + Certificate/Diploma Combos")
         if not associates_df.empty:
-            min_count = st.slider("Minimum # of Students in Combo", 1, int(associates_df["Count"].max()), 5)
-            filtered = associates_df[associates_df["Count"] >= min_count]
-            st.write(f"Showing {len(filtered)} combinations")
-            st.dataframe(filtered)
+            try:
+                max_count = int(associates_df["Count"].max()) if len(associates_df) > 0 else 1
+                default_min = min(5, max_count)
+                min_count = st.slider("Minimum # of Students in Combo", 1, max_count, default_min)
+                filtered = associates_df[associates_df["Count"] >= min_count]
+                st.write(f"Showing {len(filtered)} combinations")
+                st.dataframe(filtered)
 
-            st.subheader("Top 10 Combinations")
-            top10 = filtered.sort_values(by="Count", ascending=False).head(10)
-            chart = alt.Chart(top10).mark_bar().encode(
-                x=alt.X('Count:Q'),
-                y=alt.Y('Program_Combo:N', sort='-x'),
-                tooltip=['Program_Combo', 'Count']
-            ).properties(height=400)
-            st.altair_chart(chart, use_container_width=True)
+                if not filtered.empty:
+                    st.subheader("Top 10 Combinations")
+                    top10 = filtered.sort_values(by="Count", ascending=False).head(10)
+                    if len(top10) > 0:
+                        chart = alt.Chart(top10).mark_bar().encode(
+                            x=alt.X('Count:Q'),
+                            y=alt.Y('Program_Combo:N', sort='-x'),
+                            tooltip=['Program_Combo', 'Count']
+                        ).properties(height=400)
+                        st.altair_chart(chart, use_container_width=True)
+                    else:
+                        st.info("Not enough data to display chart")
+                else:
+                    st.info("No combinations match the minimum count filter")
+            except Exception as e:
+                st.error(f"Error displaying Associate + Certificate combinations: {e}")
         else:
             st.warning("No Associate + Certificate/Diploma combinations found in the data.")
 
@@ -294,19 +339,30 @@ if uploaded_file is not None:
     with tab2:
         st.subheader("Certificate/Diploma Combos")
         if not cert_dip_df.empty:
-            min_count = st.slider("Minimum # of Students in Combo", 1, int(cert_dip_df["Count"].max()), 5, key="cert")
-            filtered = cert_dip_df[cert_dip_df["Count"] >= min_count]
-            st.write(f"Showing {len(filtered)} combinations")
-            st.dataframe(filtered)
+            try:
+                max_count = int(cert_dip_df["Count"].max()) if len(cert_dip_df) > 0 else 1
+                default_min = min(5, max_count)
+                min_count = st.slider("Minimum # of Students in Combo", 1, max_count, default_min, key="cert")
+                filtered = cert_dip_df[cert_dip_df["Count"] >= min_count]
+                st.write(f"Showing {len(filtered)} combinations")
+                st.dataframe(filtered)
 
-            st.subheader("Top 10 Combinations")
-            top10 = filtered.sort_values(by="Count", ascending=False).head(10)
-            chart = alt.Chart(top10).mark_bar().encode(
-                x=alt.X('Count:Q'),
-                y=alt.Y('Program_Combo:N', sort='-x'),
-                tooltip=['Program_Combo', 'Count']
-            ).properties(height=400)
-            st.altair_chart(chart, use_container_width=True)
+                if not filtered.empty:
+                    st.subheader("Top 10 Combinations")
+                    top10 = filtered.sort_values(by="Count", ascending=False).head(10)
+                    if len(top10) > 0:
+                        chart = alt.Chart(top10).mark_bar().encode(
+                            x=alt.X('Count:Q'),
+                            y=alt.Y('Program_Combo:N', sort='-x'),
+                            tooltip=['Program_Combo', 'Count']
+                        ).properties(height=400)
+                        st.altair_chart(chart, use_container_width=True)
+                    else:
+                        st.info("Not enough data to display chart")
+                else:
+                    st.info("No combinations match the minimum count filter")
+            except Exception as e:
+                st.error(f"Error displaying Certificate/Diploma combinations: {e}")
         else:
             st.warning("No Certificate/Diploma combinations found in the data.")
 
@@ -314,40 +370,74 @@ if uploaded_file is not None:
     with tab3:
         st.subheader("All Program Combos (A/C/D)")
         if not all_df.empty:
-            min_count = st.slider("Minimum # of Students in Combo", 1, int(all_df["Count"].max()), 5, key="all")
-            filtered = all_df[all_df["Count"] >= min_count]
-            st.write(f"Showing {len(filtered)} combinations")
-            st.dataframe(filtered)
+            try:
+                max_count = int(all_df["Count"].max()) if len(all_df) > 0 else 1
+                default_min = min(5, max_count)
+                min_count = st.slider("Minimum # of Students in Combo", 1, max_count, default_min, key="all")
+                filtered = all_df[all_df["Count"] >= min_count]
+                st.write(f"Showing {len(filtered)} combinations")
+                st.dataframe(filtered)
 
-            st.subheader("Top 10 Combinations")
-            top10 = filtered.sort_values(by="Count", ascending=False).head(10)
-            chart = alt.Chart(top10).mark_bar().encode(
-                x=alt.X('Count:Q'),
-                y=alt.Y('Program_Combo:N', sort='-x'),
-                tooltip=['Program_Combo', 'Count']
-            ).properties(height=400)
-            st.altair_chart(chart, use_container_width=True)
+                if not filtered.empty:
+                    st.subheader("Top 10 Combinations")
+                    top10 = filtered.sort_values(by="Count", ascending=False).head(10)
+                    if len(top10) > 0:
+                        chart = alt.Chart(top10).mark_bar().encode(
+                            x=alt.X('Count:Q'),
+                            y=alt.Y('Program_Combo:N', sort='-x'),
+                            tooltip=['Program_Combo', 'Count']
+                        ).properties(height=400)
+                        st.altair_chart(chart, use_container_width=True)
+                    else:
+                        st.info("Not enough data to display chart")
+                else:
+                    st.info("No combinations match the minimum count filter")
+            except Exception as e:
+                st.error(f"Error displaying All Program combinations: {e}")
         else:
             st.warning("No valid program combinations found in the data.")
 
     # Download buttons for processed data
-    st.download_button(
-         label="⬇️ Download Associate + Certificate/Diploma Data",
-        data=associates_df.to_csv(index=False),
-        file_name='assoc_cert_dip_combinations.csv',
-        mime='text/csv'
-    )
-
-    st.download_button(
-        label="⬇️ Download Certificate/Diploma Combinations Data",
-        data=cert_dip_df.to_csv(index=False),
-        file_name='cert_diploma_combinations.csv',
-        mime='text/csv'
-    )  
+    col1, col2, col3 = st.columns(3)
     
-    st.download_button(
-        label="⬇️ Download All Program Combinations Data",
-        data=all_df.to_csv(index=False),
-        file_name='all_program_combinations.csv',
-        mime='text/csv'
-    )
+    with col1:
+        # Only enable download if data exists
+        if not associates_df.empty:
+            st.download_button(
+                label="⬇️ Download Associate + Certificate/Diploma Data",
+                data=associates_df.to_csv(index=False),
+                file_name='assoc_cert_dip_combinations.csv',
+                mime='text/csv'
+            )
+        else:
+            st.button("⬇️ Download Associate + Certificate/Diploma Data", disabled=True)
+
+    with col2:
+        if not cert_dip_df.empty:
+            st.download_button(
+                label="⬇️ Download Certificate/Diploma Combinations Data",
+                data=cert_dip_df.to_csv(index=False),
+                file_name='cert_diploma_combinations.csv',
+                mime='text/csv'
+            )
+        else:
+            st.button("⬇️ Download Certificate/Diploma Combinations Data", disabled=True)
+    
+    with col3:
+        if not all_df.empty:
+            st.download_button(
+                label="⬇️ Download All Program Combinations Data",
+                data=all_df.to_csv(index=False),
+                file_name='all_program_combinations.csv',
+                mime='text/csv'
+            )
+        else:
+            st.button("⬇️ Download All Program Combinations Data", disabled=True)
+            
+    # Add footer with info about the tool
+    st.markdown("---")
+    st.markdown("""
+    **VA Dual Objective Tool** - Analyze program enrollment combinations for VA students
+    
+    This tool identifies common combinations of degrees and certificates to assist with VA funding eligibility.
+    """)
