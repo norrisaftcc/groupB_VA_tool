@@ -12,6 +12,7 @@ A Streamlit application that analyzes program enrollment combinations for VA stu
 - Interactive filtering by minimum number of students
 - Data visualizations for the most common combinations
 - Download analyzed data in CSV format
+- Responsive design with dark mode support
 
 ## Prerequisites
 
@@ -68,6 +69,17 @@ The tool expects a CSV file with the following columns:
    - Both (All combinations)
 3. Use the sliders to filter by minimum number of students
 4. Download the processed data as needed
+
+## Dark Mode Support
+
+The VA Dual Objective Tool automatically supports dark mode through Streamlit's built-in theming:
+
+1. **Automatic theme detection**: The tool adapts to your system's light/dark mode preference automatically
+2. **Manual toggle**: Click on the three-dot menu in the upper right corner of the app
+3. **Select Settings**: Choose between Light or Dark theme
+4. **Theme customization**: Administrators can further customize the appearance by creating a custom theme in `.streamlit/config.toml`
+
+Dark mode improves readability in low-light environments and reduces eye strain during extended use.
 
 ## License
 

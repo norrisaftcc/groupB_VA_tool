@@ -6,7 +6,15 @@ import streamlit as st
 import altair as alt
 import io
 
-st.set_page_config(page_title="VA Student Program Analysis", layout="wide")
+st.set_page_config(
+    page_title="VA Student Program Analysis",
+    layout="wide",
+    page_icon="📊",
+    initial_sidebar_state="auto",
+    menu_items={
+        'About': "VA Dual Objective Tool - Analyze program enrollment combinations for VA students"
+    }
+)
 st.header("📁 VA Dual Objective Tool")
    
 # File uploader widget
